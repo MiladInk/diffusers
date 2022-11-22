@@ -361,6 +361,7 @@ def main(args):
                 torch_dtype=torch_dtype,
                 safety_checker=None,
                 revision=args.revision,
+                cache_dir='/home/mila/a/aghajohm/scratch/milad-sd',
             )
             pipeline.set_progress_bar_config(disable=True)
 
