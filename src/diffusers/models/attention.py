@@ -42,8 +42,10 @@ class Transformer2DModelOutput(BaseOutput):
 if is_xformers_available():
     import xformers
     import xformers.ops
+    xformers._is_functorch_available = True
 else:
     xformers = None
+    print("[!] Not using xformers memory efficient attention.")
 
 
 class Transformer2DModel(ModelMixin, ConfigMixin):
@@ -522,7 +524,7 @@ class CrossAttention(nn.Module):
         # is split across the batch axis to save memory
         # You can set slice_size with `set_attention_slice`
         self._slice_size = None
-        self._use_memory_efficient_attention_xformers = False
+        self._use_memory_efficient_attention_xformers = xformers is not None
 
         self.to_q = nn.Linear(query_dim, inner_dim, bias=bias)
         self.to_k = nn.Linear(cross_attention_dim, inner_dim, bias=bias)
@@ -548,7 +550,6 @@ class CrossAttention(nn.Module):
 
     def forward(self, hidden_states, context=None, mask=None):
         batch_size, sequence_length, _ = hidden_states.shape
-
         query = self.to_q(hidden_states)
         context = context if context is not None else hidden_states
         key = self.to_k(context)
@@ -565,14 +566,14 @@ class CrossAttention(nn.Module):
         # attention, what we cannot get enough of
         if self._use_memory_efficient_attention_xformers:
             hidden_states = self._memory_efficient_attention_xformers(query, key, value)
+        elif self._slice_size is None or query.shape[0] // self._slice_size == 1:
+            hidden_states = self._attention(query, key, value)
             # Some versions of xformers return output in fp32, cast it back to the dtype of the input
             hidden_states = hidden_states.to(query.dtype)
         else:
-            if self._slice_size is None or query.shape[0] // self._slice_size == 1:
-                hidden_states = self._attention(query, key, value)
-            else:
-                hidden_states = self._sliced_attention(query, key, value, sequence_length, dim)
+            hidden_states = self._sliced_attention(query, key, value, sequence_length, dim)
 
+        hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
         # linear proj
         hidden_states = self.to_out[0](hidden_states)
         # dropout
@@ -592,8 +593,6 @@ class CrossAttention(nn.Module):
 
         hidden_states = torch.bmm(attention_probs, value)
 
-        # reshape hidden_states
-        hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
         return hidden_states
 
     def _sliced_attention(self, query, key, value, sequence_length, dim):
@@ -616,9 +615,6 @@ class CrossAttention(nn.Module):
             attn_slice = torch.bmm(attn_slice, value[start_idx:end_idx])
 
             hidden_states[start_idx:end_idx] = attn_slice
-
-        # reshape hidden_states
-        hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
         return hidden_states
 
     def _memory_efficient_attention_xformers(self, query, key, value):
@@ -626,7 +622,6 @@ class CrossAttention(nn.Module):
         key = key.contiguous()
         value = value.contiguous()
         hidden_states = xformers.ops.memory_efficient_attention(query, key, value, attn_bias=None)
-        hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
         return hidden_states
 
 

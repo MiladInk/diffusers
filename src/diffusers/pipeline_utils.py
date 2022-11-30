@@ -182,8 +182,8 @@ class DiffusionPipeline(ConfigMixin):
 
                 register_dict = {name: (library, class_name)}
 
-            # save model index config
-            self.register_to_config(**register_dict)
+                # save model index config
+                self.register_to_config(**register_dict)
 
             # set models
             setattr(self, name, module)
@@ -233,8 +233,9 @@ class DiffusionPipeline(ConfigMixin):
                 if save_method_name is not None:
                     break
 
-            save_method = getattr(sub_model, save_method_name)
-            save_method(os.path.join(save_directory, pipeline_component_name))
+            if save_method_name is not None:
+                save_method = getattr(sub_model, save_method_name)
+                save_method(os.path.join(save_directory, pipeline_component_name))
 
     def to(self, torch_device: Optional[Union[str, torch.device]] = None):
         if torch_device is None:
@@ -698,9 +699,9 @@ class DiffusionPipeline(ConfigMixin):
                 init_kwargs[module] = passed_class_obj.get(module, None)
         elif len(missing_modules) > 0:
             passed_modules = set(list(init_kwargs.keys()) + list(passed_class_obj.keys())) - optional_kwargs
-            raise ValueError(
-                f"Pipeline {pipeline_class} expected {expected_modules}, but only {passed_modules} were passed."
-            )
+            # raise ValueError(
+            #     f"Pipeline {pipeline_class} expected {expected_modules}, but only {passed_modules} were passed."
+            # )
 
         # 5. Instantiate the pipeline
         model = pipeline_class(**init_kwargs)

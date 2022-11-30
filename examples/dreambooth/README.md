@@ -1,3 +1,27 @@
+To reduce VRAM usage to 9.92 GB, pass `--gradient_checkpointing` and `--use_8bit_adam` flag to use 8 bit adam optimizer from [bitsandbytes](https://github.com/TimDettmers/bitsandbytes).
+
+Model with just [xformers](https://github.com/facebookresearch/xformers) memory efficient flash attention uses 15.79 GB VRAM with `--gradient_checkpointing` else 17.7 GB. Both have no loss in precision at all. gradient_checkpointing recalculates intermediate activations to save memory at cost of some speed.
+
+Caching the outputs of VAE and Text Encoder and freeing them also helped in reducing memory.
+
+You can now convert to ckpt format using this script to use in UIs like AUTOMATIC1111. https://github.com/ShivamShrirao/diffusers/raw/main/scripts/convert_diffusers_to_original_stable_diffusion.py Check colab notebook for example usage.
+
+[![DreamBooth Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ShivamShrirao/diffusers/blob/main/examples/dreambooth/DreamBooth_Stable_Diffusion.ipynb)
+
+Use the table below to choose the best flags based on your memory and speed requirements. Tested on Tesla T4 GPU.
+
+| `fp16` | `train_batch_size` | `gradient_accumulation_steps` | `gradient_checkpointing` | `use_8bit_adam` | GB VRAM usage | Speed (it/s) |
+| ---- | ------------------ | ----------------------------- | ----------------------- | --------------- | ---------- | ------------ |
+| fp16 | 1                  | 1                             | TRUE                    | TRUE            | 9.92       | 0.93         |
+| no   | 1                  | 1                             | TRUE                    | TRUE            | 10.08      | 0.42         |
+| fp16 | 2                  | 1                             | TRUE                    | TRUE            | 10.4       | 0.66         |
+| fp16 | 1                  | 1                             | FALSE                   | TRUE            | 11.17      | 1.14         |
+| no   | 1                  | 1                             | FALSE                   | TRUE            | 11.17      | 0.49         |
+| fp16 | 1                  | 2                             | TRUE                    | TRUE            | 11.56      | 1            |
+| fp16 | 2                  | 1                             | FALSE                   | TRUE            | 13.67      | 0.82         |
+| fp16 | 1                  | 2                             | FALSE                   | TRUE            | 13.7       | 0.83          |
+| fp16 | 1                  | 1                             | TRUE                    | FALSE           | 15.79      | 0.77         |
+
 # DreamBooth training example
 
 [DreamBooth](https://arxiv.org/abs/2208.12242) is a method to personalize text2image models like stable diffusion given just a few(3~5) images of a subject.
@@ -10,6 +34,7 @@ The `train_dreambooth.py` script shows how to implement the training procedure a
 Before running the scripts, make sure to install the library's training dependencies:
 
 ```bash
+pip install git+https://github.com/ShivamShrirao/diffusers.git
 pip install -U -r requirements.txt
 ```
 
@@ -166,8 +191,6 @@ accelerate launch --mixed_precision="fp16" train_dreambooth.py \
 
 The script also allows to fine-tune the `text_encoder` along with the `unet`. It's been observed experimentally that fine-tuning `text_encoder` gives much better results especially on faces. 
 Pass the `--train_text_encoder` argument to the script to enable training `text_encoder`.
-
-___Note: Training text encoder requires more memory, with this option the training won't fit on 16GB GPU. It needs at least 24GB VRAM.___
 
 ```bash
 export MODEL_NAME="CompVis/stable-diffusion-v1-4"
